@@ -85,9 +85,13 @@ func (p *Proxy) handleConn(ctx context.Context, c net.Conn) error {
 
 	var wg errgroup.Group
 
+	defer func() {
+		c.Close()
+		s.Close()
+	}()
+
 	// client => upstream
 	wg.Go(func() error {
-		defer s.Close()
 		_, err := io.Copy(s, c)
 		if err != nil {
 			return fmt.Errorf("Copy from client: %v", err)
@@ -97,7 +101,6 @@ func (p *Proxy) handleConn(ctx context.Context, c net.Conn) error {
 
 	// upstream => client
 	wg.Go(func() error {
-		defer c.Close()
 		_, err := io.Copy(c, s)
 		if err != nil {
 			return fmt.Errorf("Copy from upstream: %v", err)
