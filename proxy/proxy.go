@@ -8,6 +8,8 @@ import (
 	"net"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/kazeburo/motarei/discovery"
 	ss "github.com/lestrrat/go-server-starter-listener"
 )
@@ -20,13 +22,13 @@ const (
 type Proxy struct {
 	listen  string
 	port    string
-	timeout uint16
+	timeout time.Duration
 	d       *discovery.Discovery
 	done    chan struct{}
 }
 
 // NewProxy create new proxy
-func NewProxy(listen string, port string, timeout uint16, d *discovery.Discovery) *Proxy {
+func NewProxy(listen string, port string, timeout time.Duration, d *discovery.Discovery) *Proxy {
 	return &Proxy{
 		listen:  listen,
 		port:    port,
@@ -62,10 +64,13 @@ func (p *Proxy) handleConn(ctx context.Context, c net.Conn) error {
 		c.Close()
 		return err
 	}
+	if len(backends) == 0 {
+		return fmt.Errorf("Failed to get backends port")
+	}
 	var s net.Conn
 	for _, backend := range backends {
 		// todo timeout
-		s, err = net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", backend.PublicPort), time.Duration(p.timeout)*time.Second)
+		s, err = net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", backend.PublicPort), p.timeout)
 		if err == nil {
 			break
 		} else {
@@ -78,38 +83,27 @@ func (p *Proxy) handleConn(ctx context.Context, c net.Conn) error {
 		return err
 	}
 
-	doneCh := make(chan bool)
-	goClose := false
+	var wg errgroup.Group
 
 	// client => upstream
-	go func() {
-		defer func() { doneCh <- true }()
+	wg.Go(func() error {
+		defer s.Close()
 		_, err := io.Copy(s, c)
 		if err != nil {
-			if !goClose {
-				log.Printf("Copy from client: %v", err)
-			}
-			return
+			return fmt.Errorf("Copy from client: %v", err)
 		}
-	}()
+		return nil
+	})
 
 	// upstream => client
-	go func() {
-		defer func() { doneCh <- true }()
+	wg.Go(func() error {
+		defer c.Close()
 		_, err := io.Copy(c, s)
 		if err != nil {
-			if !goClose {
-				log.Printf("Copy from upstream: %v", err)
-			}
-			return
+			return fmt.Errorf("Copy from upstream: %v", err)
 		}
-	}()
+		return nil
+	})
 
-	<-doneCh
-	goClose = true
-	s.Close()
-	c.Close()
-	<-doneCh
-
-	return nil
+	return wg.Wait()
 }
