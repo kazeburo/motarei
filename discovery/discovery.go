@@ -25,7 +25,7 @@ type BackendContainer struct {
 // Discovery backend discovery
 type Discovery struct {
 	cli         *client.Client
-	mu          *sync.RWMutex
+	mu          *sync.Mutex
 	backends    []BackendContainer
 	filter      filters.Args
 	privatePort uint16
@@ -41,7 +41,7 @@ func NewDiscovery(label string, privatePort uint16) (*Discovery, error) {
 	filter.Add("label", label)
 	return &Discovery{
 		cli:         cli,
-		mu:          new(sync.RWMutex),
+		mu:          new(sync.Mutex),
 		filter:      filter,
 		privatePort: privatePort,
 	}, nil

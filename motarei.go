@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"runtime"
+	"time"
 
 	flags "github.com/jessevdk/go-flags"
 	"github.com/kazeburo/motarei/discovery"
@@ -16,12 +17,12 @@ import (
 var Version string
 
 type cmdOpts struct {
-	Listen              string `short:"l" long:"listen" default:"0.0.0.0" description:"address to bind"`
-	Port                string `short:"p" long:"port" description:"Port number to bind" required:"true"`
-	DockerLabel         string `long:"docker-label" description:"label to filter container. eg app=nginx" required:"true"`
-	DockerPrivatePort   uint16 `long:"docker-private-port" description:"Private port of container to use" required:"true"`
-	ProxyConnectTimeout uint16 `long:"proxy-connect-timeout" default:"60" description:"timeout of connection to upstream"`
-	Version             bool   `short:"v" long:"version" description:"Show version"`
+	Listen              string        `short:"l" long:"listen" default:"0.0.0.0" description:"address to bind"`
+	Port                string        `short:"p" long:"port" description:"Port number to bind" required:"true"`
+	DockerLabel         string        `long:"docker-label" description:"label to filter container. eg app=nginx" required:"true"`
+	DockerPrivatePort   uint16        `long:"docker-private-port" description:"Private port of container to use" required:"true"`
+	ProxyConnectTimeout time.Duration `long:"proxy-connect-timeout" default:"60s" description:"timeout of connection to upstream"`
+	Version             bool          `short:"v" long:"version" description:"Show version"`
 }
 
 func main() {
