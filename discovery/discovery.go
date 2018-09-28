@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"sort"
 	"sync"
@@ -24,48 +25,78 @@ type BackendContainer struct {
 
 // Discovery backend discovery
 type Discovery struct {
-	cli         *client.Client
-	mu          *sync.Mutex
-	backends    []BackendContainer
-	filter      filters.Args
-	privatePort uint16
+	cli          *client.Client
+	mu           *sync.Mutex
+	backends     map[uint16][]BackendContainer
+	filter       filters.Args
+	privatePorts []uint16
 }
 
 // NewDiscovery : create new Discovery
-func NewDiscovery(label string, privatePort uint16) (*Discovery, error) {
+func NewDiscovery(ctx context.Context, label string) (*Discovery, error) {
 	cli, err := client.NewClientWithOpts(client.WithVersion("1.30"))
 	if err != nil {
 		return nil, err
 	}
 	filter := filters.NewArgs()
 	filter.Add("label", label)
+
+	containers, err := cli.ContainerList(ctx, types.ContainerListOptions{Filters: filter})
+	if err != nil {
+		return nil, err
+	}
+	if len(containers) < 1 {
+		return nil, fmt.Errorf("Could not find containers with label: %s", label)
+	}
+	sort.SliceStable(containers, func(i, j int) bool { return containers[i].ID < containers[j].ID })
+	sort.SliceStable(containers, func(i, j int) bool { return containers[i].Created > containers[j].Created })
+	var privatePorts []uint16
+	for _, port := range containers[0].Ports {
+		if port.Type == "tcp" {
+			privatePorts = append(privatePorts, port.PrivatePort)
+		}
+	}
+	if len(privatePorts) < 1 {
+		return nil, fmt.Errorf("containers were found, but that container has no public port. container-id:%s", containers[0].ID)
+	}
+
 	return &Discovery{
-		cli:         cli,
-		mu:          new(sync.Mutex),
-		filter:      filter,
-		privatePort: privatePort,
+		cli:          cli,
+		mu:           new(sync.Mutex),
+		filter:       filter,
+		privatePorts: privatePorts,
 	}, nil
 }
 
-func (d *Discovery) runDiscovery(ctx context.Context) ([]BackendContainer, error) {
+// GetPrivatePorts get private ports
+func (d *Discovery) GetPrivatePorts() []uint16 {
+	return d.privatePorts
+}
+
+// RunDiscovery: run Discovery
+func (d *Discovery) RunDiscovery(ctx context.Context) (map[uint16][]BackendContainer, error) {
 	containers, err := d.cli.ContainerList(ctx, types.ContainerListOptions{Filters: d.filter})
 	if err != nil {
 		return nil, err
 	}
 
-	backends := []BackendContainer{}
-	for _, container := range containers {
-		publicPort := uint16(0)
-		for _, port := range container.Ports {
-			if port.PrivatePort == d.privatePort {
-				publicPort = port.PublicPort
+	backends := map[uint16][]BackendContainer{}
+	for _, privatePort := range d.privatePorts {
+		portBackends := []BackendContainer{}
+		for _, container := range containers {
+			publicPort := uint16(0)
+			for _, port := range container.Ports {
+				if port.Type == "tcp" && port.PrivatePort == privatePort {
+					publicPort = port.PublicPort
+				}
 			}
+			if publicPort > 0 {
+				portBackends = append(portBackends, BackendContainer{container, publicPort})
+			}
+			sort.SliceStable(portBackends, func(i, j int) bool { return portBackends[i].C.ID < portBackends[j].C.ID })
+			sort.SliceStable(portBackends, func(i, j int) bool { return portBackends[i].C.Created > portBackends[j].C.Created })
 		}
-		if publicPort > 0 {
-			backends = append(backends, BackendContainer{container, publicPort})
-		}
-		sort.SliceStable(backends, func(i, j int) bool { return backends[i].C.ID < backends[j].C.ID })
-		sort.SliceStable(backends, func(i, j int) bool { return backends[i].C.Created > backends[j].C.Created })
+		backends[privatePort] = portBackends
 	}
 
 	d.mu.Lock()
@@ -75,19 +106,23 @@ func (d *Discovery) runDiscovery(ctx context.Context) ([]BackendContainer, error
 }
 
 // Get access token
-func (d *Discovery) Get(ctx context.Context) ([]BackendContainer, error) {
+func (d *Discovery) Get(ctx context.Context, privatePort uint16) ([]BackendContainer, error) {
 	d.mu.Lock()
-	backends := d.backends
+	portBackends, ok := d.backends[privatePort]
 	d.mu.Unlock()
 
-	if len(backends) > 0 {
-		return backends, nil
+	if ok && len(portBackends) > 0 {
+		return portBackends, nil
 	}
-	backends, err := d.runDiscovery(ctx)
+	backends, err := d.RunDiscovery(ctx)
 	if err != nil {
-		return backends, err
+		return nil, err
 	}
-	return backends, nil
+	portBackends, ok = backends[privatePort]
+	if ok && len(portBackends) > 0 {
+		return portBackends, nil
+	}
+	return nil, fmt.Errorf("Could not find Backends for private port: %d", privatePort)
 }
 
 // Run refresh token regularly
@@ -99,7 +134,7 @@ func (d *Discovery) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case _ = <-ticker.C:
-			_, err := d.runDiscovery(ctx)
+			_, err := d.RunDiscovery(ctx)
 			if err != nil {
 				log.Printf("Regularly runDiscovery failed:%v", err)
 			}
