@@ -10,7 +10,7 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
-	"github.com/docker/docker/client"
+	client "github.com/docker/docker/client"
 )
 
 const (
@@ -34,7 +34,7 @@ type Discovery struct {
 
 // NewDiscovery : create new Discovery
 func NewDiscovery(ctx context.Context, label string) (*Discovery, error) {
-	cli, err := client.NewClientWithOpts(client.WithVersion("1.30"))
+	cli, err := client.NewEnvClient()
 	if err != nil {
 		return nil, err
 	}

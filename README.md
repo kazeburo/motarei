@@ -4,8 +4,9 @@ Motarei tracks container's public port and proxy to there.
 
 ```
 client ==>  Motarei ===================> container [new]
-               | filter with label   |=> container [old]
-               | and private port
+               |                     `=> container [old]
+               | find container with label
+               | and its private port
            docker api
 ```
 
@@ -24,10 +25,10 @@ nginx container's private port is 80.
 run Motarei.
 
 ```
-$ motarei --port 8080 --docker-private-port=80 --docker-label app=nginx
+$ sudo motarei --label app=nginx
 ```
 
-Now you can acess to nginx via port 8080.
+Now you can acess to nginx via port 80.
 
 Restart container
 
