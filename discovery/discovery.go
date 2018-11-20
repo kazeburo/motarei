@@ -45,6 +45,8 @@ func NewDiscovery(ctx context.Context, label string) (*Discovery, error) {
 	if err != nil {
 		return nil, err
 	}
+	containers = filterHealthy(ctx, cli, containers)
+
 	if len(containers) < 1 {
 		return nil, fmt.Errorf("Could not find containers with label: %s", label)
 	}
@@ -59,6 +61,7 @@ func NewDiscovery(ctx context.Context, label string) (*Discovery, error) {
 	if len(privatePorts) < 1 {
 		return nil, fmt.Errorf("containers were found, but that container has no public port. container-id:%s", containers[0].ID)
 	}
+	fmt.Println(len(containers))
 
 	return &Discovery{
 		cli:          cli,
@@ -73,12 +76,43 @@ func (d *Discovery) GetPrivatePorts() []uint16 {
 	return d.privatePorts
 }
 
-// RunDiscovery: run Discovery
+// inspecter is ContainerInspect interface.
+type inspecter interface {
+	ContainerInspect(ctx context.Context, containerID string) (types.ContainerJSON, error)
+}
+
+// filterHealthy filter out unhealthy and starup containers.
+// If HEALTHCHECK instruction is not defined, don't filter out.
+func filterHealthy(ctx context.Context, client inspecter, containers []types.Container) []types.Container {
+	var result []types.Container
+
+	for _, c := range containers {
+		resp, err := client.ContainerInspect(ctx, c.ID)
+		if err != nil {
+			result = append(result, c)
+			continue
+		}
+
+		// If HEALTHCHECK instruction is not defined, don't filter out.
+		if resp.State.Health == nil {
+			result = append(result, c)
+			continue
+		}
+
+		if resp.State.Health.Status == types.Healthy {
+			result = append(result, c)
+		}
+	}
+	return result
+}
+
+// RunDiscovery run Discovery
 func (d *Discovery) RunDiscovery(ctx context.Context) (map[uint16][]BackendContainer, error) {
 	containers, err := d.cli.ContainerList(ctx, types.ContainerListOptions{Filters: d.filter})
 	if err != nil {
 		return nil, err
 	}
+	containers = filterHealthy(ctx, d.cli, containers)
 
 	backends := map[uint16][]BackendContainer{}
 	for _, privatePort := range d.privatePorts {
