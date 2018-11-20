@@ -61,7 +61,6 @@ func NewDiscovery(ctx context.Context, label string) (*Discovery, error) {
 	if len(privatePorts) < 1 {
 		return nil, fmt.Errorf("containers were found, but that container has no public port. container-id:%s", containers[0].ID)
 	}
-	fmt.Println(len(containers))
 
 	return &Discovery{
 		cli:          cli,
