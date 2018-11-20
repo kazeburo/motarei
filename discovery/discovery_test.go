@@ -45,7 +45,7 @@ func (f *fakeClient) ContainerInspect(ctx context.Context, containerID string) (
 
 func TestFilerHealthy(t *testing.T) {
 	testcase := map[string]struct {
-		client     inspecter
+		client     inspector
 		containers []types.Container
 		expected   int
 	}{

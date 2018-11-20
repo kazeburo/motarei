@@ -75,14 +75,14 @@ func (d *Discovery) GetPrivatePorts() []uint16 {
 	return d.privatePorts
 }
 
-// inspecter is ContainerInspect interface.
-type inspecter interface {
+// inspector is ContainerInspect interface.
+type inspector interface {
 	ContainerInspect(ctx context.Context, containerID string) (types.ContainerJSON, error)
 }
 
 // filterHealthy filter out unhealthy and starup containers.
 // If HEALTHCHECK instruction is not defined, don't filter out.
-func filterHealthy(ctx context.Context, client inspecter, containers []types.Container) []types.Container {
+func filterHealthy(ctx context.Context, client inspector, containers []types.Container) []types.Container {
 	var result []types.Container
 
 	for _, c := range containers {
