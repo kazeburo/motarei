@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"runtime"
 	"time"
@@ -11,6 +10,7 @@ import (
 	flags "github.com/jessevdk/go-flags"
 	"github.com/kazeburo/motarei/discovery"
 	"github.com/kazeburo/motarei/proxy"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -43,18 +43,30 @@ Compiler: %s %s
 
 	}
 
+	logger, err := zap.NewProduction()
+	if err != nil {
+		os.Exit(1)
+	}
+	defer logger.Sync()
+
+	sugar := logger.Sugar()
+
 	ctx := context.Background()
 
 	d, err := discovery.NewDiscovery(ctx, opts.DockerLabel)
 	if err != nil {
-		log.Fatalf("failed initialize discovery: %v", err)
+		sugar.Fatalw("failed initialize discovery",
+			"reason", err,
+		)
 	}
 	privatePorts := d.GetPrivatePorts()
 	_, err = d.RunDiscovery(ctx)
 	if err != nil {
-		log.Fatalf("failed first discovery: %v", err)
+		sugar.Fatalw("failed first discovery",
+			"reason", err,
+		)
 	}
-	go d.Run(ctx)
+	go d.Run(ctx, sugar)
 
 	eg, ctx := errgroup.WithContext(ctx)
 	ctx, cancel := context.WithCancel(ctx)
@@ -64,11 +76,13 @@ Compiler: %s %s
 		port := port
 		eg.Go(func() error {
 			p := proxy.NewProxy(opts.BindIP, port, opts.ProxyConnectTimeout, d)
-			return p.Start(ctx)
+			return p.Start(ctx, sugar)
 		})
 	}
 	if err := eg.Wait(); err != nil {
 		defer cancel()
-		log.Fatal(err)
+		sugar.Fatalw("failed to start proxy",
+			"reason", err,
+		)
 	}
 }

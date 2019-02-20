@@ -3,7 +3,6 @@ package discovery
 import (
 	"context"
 	"fmt"
-	"log"
 	"sort"
 	"sync"
 	"time"
@@ -11,6 +10,7 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
 	client "github.com/docker/docker/client"
+	"go.uber.org/zap"
 )
 
 const (
@@ -126,7 +126,7 @@ func (d *Discovery) Get(ctx context.Context, privatePort uint16) ([]BackendConta
 }
 
 // Run refresh token regularly
-func (d *Discovery) Run(ctx context.Context) {
+func (d *Discovery) Run(ctx context.Context, sugar *zap.SugaredLogger) {
 	ticker := time.NewTicker(refreshInterval * time.Second)
 	defer ticker.Stop()
 	for {
@@ -136,7 +136,9 @@ func (d *Discovery) Run(ctx context.Context) {
 		case _ = <-ticker.C:
 			_, err := d.RunDiscovery(ctx)
 			if err != nil {
-				log.Printf("Regularly runDiscovery failed:%v", err)
+				sugar.Errorw("Regularly runDiscovery failed",
+					"reason", err,
+				)
 			}
 		}
 	}
