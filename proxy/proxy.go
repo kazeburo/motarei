@@ -22,28 +22,30 @@ type Proxy struct {
 	timeout time.Duration
 	d       *discovery.Discovery
 	done    chan struct{}
+	logger  *zap.Logger
 }
 
 // NewProxy create new proxy
-func NewProxy(listen string, port uint16, timeout time.Duration, d *discovery.Discovery) *Proxy {
+func NewProxy(listen string, port uint16, timeout time.Duration, d *discovery.Discovery, logger *zap.Logger) *Proxy {
 	return &Proxy{
 		listen:  listen,
 		port:    port,
 		timeout: timeout,
 		d:       d,
 		done:    make(chan struct{}),
+		logger:  logger,
 	}
 }
 
 // Start start new proxy
-func (p *Proxy) Start(ctx context.Context, sugar *zap.SugaredLogger) error {
+func (p *Proxy) Start(ctx context.Context) error {
 	addr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", p.listen, p.port))
 	if err != nil {
 		return err
 	}
-	sugar.Infow("Start listen",
-		"host", p.listen,
-		"port", p.port,
+	p.logger.Info("Start listen",
+		zap.String("host", p.listen),
+		zap.Uint16("port", p.port),
 	)
 	l, err := net.ListenTCP("tcp", addr)
 	if err != nil {
@@ -53,9 +55,9 @@ func (p *Proxy) Start(ctx context.Context, sugar *zap.SugaredLogger) error {
 	go func() {
 		select {
 		case <-ctx.Done():
-			sugar.Infow("Go shutdown",
-				"host", p.listen,
-				"port", p.port,
+			p.logger.Info("Go shutdown",
+				zap.String("host", p.listen),
+				zap.Uint16("port", p.port),
 			)
 			l.Close()
 		}
@@ -67,20 +69,20 @@ func (p *Proxy) Start(ctx context.Context, sugar *zap.SugaredLogger) error {
 			return err
 		}
 		conn.SetNoDelay(true)
-		go p.handleConn(ctx, sugar, conn)
+		go p.handleConn(ctx, conn)
 	}
 }
 
-func (p *Proxy) handleConn(ctx context.Context, sugar *zap.SugaredLogger, c net.Conn) error {
+func (p *Proxy) handleConn(ctx context.Context, c net.Conn) error {
 	backends, err := p.d.Get(ctx, p.port)
 	if err != nil {
-		sugar.Errorw("Failed to get backends", zap.Error(err))
+		p.logger.Error("Failed to get backends", zap.Error(err))
 		c.Close()
 		return err
 	}
 
 	if len(backends) == 0 {
-		sugar.Error("Failed to get backends port")
+		p.logger.Error("Failed to get backends port")
 		c.Close()
 		return fmt.Errorf("Failed to get backends port")
 	}
@@ -91,12 +93,12 @@ func (p *Proxy) handleConn(ctx context.Context, sugar *zap.SugaredLogger, c net.
 		if err == nil {
 			break
 		} else {
-			sugar.Errorw("Failed to connect backend", zap.Error(err))
+			p.logger.Error("Failed to connect backend", zap.Error(err))
 		}
 	}
 
 	if err != nil {
-		sugar.Errorw("Giveup to connect backends", zap.Error(err))
+		p.logger.Error("Giveup to connect backends", zap.Error(err))
 		c.Close()
 		return err
 	}
@@ -110,7 +112,7 @@ func (p *Proxy) handleConn(ctx context.Context, sugar *zap.SugaredLogger, c net.
 		_, err := io.Copy(s, c)
 		if err != nil {
 			if !goClose {
-				sugar.Errorw("Copy from client", zap.Error(err))
+				p.logger.Error("Copy from client", zap.Error(err))
 				return
 			}
 		}
@@ -123,7 +125,7 @@ func (p *Proxy) handleConn(ctx context.Context, sugar *zap.SugaredLogger, c net.
 		_, err := io.Copy(c, s)
 		if err != nil {
 			if !goClose {
-				sugar.Errorw("Copy from upstream", zap.Error(err))
+				p.logger.Error("Copy from upstream", zap.Error(err))
 				return
 			}
 		}

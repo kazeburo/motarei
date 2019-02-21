@@ -49,20 +49,18 @@ Compiler: %s %s
 	}
 	defer logger.Sync()
 
-	sugar := logger.Sugar()
-
 	ctx := context.Background()
 
-	d, err := discovery.NewDiscovery(ctx, opts.DockerLabel)
+	d, err := discovery.NewDiscovery(ctx, opts.DockerLabel, logger)
 	if err != nil {
-		sugar.Fatalw("failed initialize discovery", zap.Error(err))
+		logger.Fatal("failed initialize discovery", zap.Error(err))
 	}
 	privatePorts := d.GetPrivatePorts()
 	_, err = d.RunDiscovery(ctx)
 	if err != nil {
-		sugar.Fatalw("failed first discovery", zap.Error(err))
+		logger.Fatal("failed first discovery", zap.Error(err))
 	}
-	go d.Run(ctx, sugar)
+	go d.Run(ctx)
 
 	eg, ctx := errgroup.WithContext(ctx)
 	ctx, cancel := context.WithCancel(ctx)
@@ -71,12 +69,12 @@ Compiler: %s %s
 	for _, port := range privatePorts {
 		port := port
 		eg.Go(func() error {
-			p := proxy.NewProxy(opts.BindIP, port, opts.ProxyConnectTimeout, d)
-			return p.Start(ctx, sugar)
+			p := proxy.NewProxy(opts.BindIP, port, opts.ProxyConnectTimeout, d, logger)
+			return p.Start(ctx)
 		})
 	}
 	if err := eg.Wait(); err != nil {
 		defer cancel()
-		sugar.Fatalw("failed to start proxy", zap.Error(err))
+		logger.Fatal("failed to start proxy", zap.Error(err))
 	}
 }

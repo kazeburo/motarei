@@ -30,10 +30,11 @@ type Discovery struct {
 	backends     map[uint16][]BackendContainer
 	filter       filters.Args
 	privatePorts []uint16
+	logger       *zap.Logger
 }
 
 // NewDiscovery : create new Discovery
-func NewDiscovery(ctx context.Context, label string) (*Discovery, error) {
+func NewDiscovery(ctx context.Context, label string, logger *zap.Logger) (*Discovery, error) {
 	cli, err := client.NewEnvClient()
 	if err != nil {
 		return nil, err
@@ -65,6 +66,7 @@ func NewDiscovery(ctx context.Context, label string) (*Discovery, error) {
 		mu:           new(sync.Mutex),
 		filter:       filter,
 		privatePorts: privatePorts,
+		logger:       logger,
 	}, nil
 }
 
@@ -126,7 +128,7 @@ func (d *Discovery) Get(ctx context.Context, privatePort uint16) ([]BackendConta
 }
 
 // Run refresh token regularly
-func (d *Discovery) Run(ctx context.Context, sugar *zap.SugaredLogger) {
+func (d *Discovery) Run(ctx context.Context) {
 	ticker := time.NewTicker(refreshInterval * time.Second)
 	defer ticker.Stop()
 	for {
@@ -136,7 +138,7 @@ func (d *Discovery) Run(ctx context.Context, sugar *zap.SugaredLogger) {
 		case _ = <-ticker.C:
 			_, err := d.RunDiscovery(ctx)
 			if err != nil {
-				sugar.Errorw("Regularly runDiscovery failed", zap.Error(err))
+				d.logger.Error("Regularly runDiscovery failed", zap.Error(err))
 			}
 		}
 	}
