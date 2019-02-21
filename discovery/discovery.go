@@ -136,9 +136,7 @@ func (d *Discovery) Run(ctx context.Context, sugar *zap.SugaredLogger) {
 		case _ = <-ticker.C:
 			_, err := d.RunDiscovery(ctx)
 			if err != nil {
-				sugar.Errorw("Regularly runDiscovery failed",
-					"reason", err,
-				)
+				sugar.Errorw("Regularly runDiscovery failed", zap.Error(err))
 			}
 		}
 	}

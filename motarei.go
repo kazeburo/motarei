@@ -55,16 +55,12 @@ Compiler: %s %s
 
 	d, err := discovery.NewDiscovery(ctx, opts.DockerLabel)
 	if err != nil {
-		sugar.Fatalw("failed initialize discovery",
-			"reason", err,
-		)
+		sugar.Fatalw("failed initialize discovery", zap.Error(err))
 	}
 	privatePorts := d.GetPrivatePorts()
 	_, err = d.RunDiscovery(ctx)
 	if err != nil {
-		sugar.Fatalw("failed first discovery",
-			"reason", err,
-		)
+		sugar.Fatalw("failed first discovery", zap.Error(err))
 	}
 	go d.Run(ctx, sugar)
 
@@ -81,8 +77,6 @@ Compiler: %s %s
 	}
 	if err := eg.Wait(); err != nil {
 		defer cancel()
-		sugar.Fatalw("failed to start proxy",
-			"reason", err,
-		)
+		sugar.Fatalw("failed to start proxy", zap.Error(err))
 	}
 }

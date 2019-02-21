@@ -74,17 +74,13 @@ func (p *Proxy) Start(ctx context.Context, sugar *zap.SugaredLogger) error {
 func (p *Proxy) handleConn(ctx context.Context, sugar *zap.SugaredLogger, c net.Conn) error {
 	backends, err := p.d.Get(ctx, p.port)
 	if err != nil {
-		sugar.Errorw("Failed to get backends",
-			"reason", err,
-		)
+		sugar.Errorw("Failed to get backends", zap.Error(err))
 		c.Close()
 		return err
 	}
 
 	if len(backends) == 0 {
-		sugar.Errorw("Failed to get backends port",
-			"reason", "no backend was found",
-		)
+		sugar.Error("Failed to get backends port")
 		c.Close()
 		return fmt.Errorf("Failed to get backends port")
 	}
@@ -95,16 +91,12 @@ func (p *Proxy) handleConn(ctx context.Context, sugar *zap.SugaredLogger, c net.
 		if err == nil {
 			break
 		} else {
-			sugar.Errorw("Failed to connect backend",
-				"reason", err,
-			)
+			sugar.Errorw("Failed to connect backend", zap.Error(err))
 		}
 	}
 
 	if err != nil {
-		sugar.Errorw("Giveup to connect backends",
-			"reason", err,
-		)
+		sugar.Errorw("Giveup to connect backends", zap.Error(err))
 		c.Close()
 		return err
 	}
@@ -118,9 +110,7 @@ func (p *Proxy) handleConn(ctx context.Context, sugar *zap.SugaredLogger, c net.
 		_, err := io.Copy(s, c)
 		if err != nil {
 			if !goClose {
-				sugar.Errorw("Copy from client",
-					"reason", err,
-				)
+				sugar.Errorw("Copy from client", zap.Error(err))
 				return
 			}
 		}
@@ -133,9 +123,7 @@ func (p *Proxy) handleConn(ctx context.Context, sugar *zap.SugaredLogger, c net.
 		_, err := io.Copy(c, s)
 		if err != nil {
 			if !goClose {
-				sugar.Errorw("Copy from upstream",
-					"reason", err,
-				)
+				sugar.Errorw("Copy from upstream", zap.Error(err))
 				return
 			}
 		}
