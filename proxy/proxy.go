@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"time"
 
 	"github.com/kazeburo/motarei/discovery"
+	"go.uber.org/zap"
 )
 
 const (
@@ -22,16 +22,18 @@ type Proxy struct {
 	timeout time.Duration
 	d       *discovery.Discovery
 	done    chan struct{}
+	logger  *zap.Logger
 }
 
 // NewProxy create new proxy
-func NewProxy(listen string, port uint16, timeout time.Duration, d *discovery.Discovery) *Proxy {
+func NewProxy(listen string, port uint16, timeout time.Duration, d *discovery.Discovery, logger *zap.Logger) *Proxy {
 	return &Proxy{
 		listen:  listen,
 		port:    port,
 		timeout: timeout,
 		d:       d,
 		done:    make(chan struct{}),
+		logger:  logger,
 	}
 }
 
@@ -41,7 +43,10 @@ func (p *Proxy) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	log.Printf("Start listen %s:%d", p.listen, p.port)
+	p.logger.Info("Start listen",
+		zap.String("host", p.listen),
+		zap.Uint16("port", p.port),
+	)
 	l, err := net.ListenTCP("tcp", addr)
 	if err != nil {
 		return err
@@ -50,7 +55,10 @@ func (p *Proxy) Start(ctx context.Context) error {
 	go func() {
 		select {
 		case <-ctx.Done():
-			log.Printf("Go shutdown %s:%d", p.listen, p.port)
+			p.logger.Info("Go shutdown",
+				zap.String("host", p.listen),
+				zap.Uint16("port", p.port),
+			)
 			l.Close()
 		}
 	}()
@@ -68,13 +76,13 @@ func (p *Proxy) Start(ctx context.Context) error {
 func (p *Proxy) handleConn(ctx context.Context, c net.Conn) error {
 	backends, err := p.d.Get(ctx, p.port)
 	if err != nil {
-		log.Printf("Failed to get backends: %v", err)
+		p.logger.Error("Failed to get backends", zap.Error(err))
 		c.Close()
 		return err
 	}
 
 	if len(backends) == 0 {
-		log.Printf("Failed to get backends port")
+		p.logger.Error("Failed to get backends port")
 		c.Close()
 		return fmt.Errorf("Failed to get backends port")
 	}
@@ -85,12 +93,12 @@ func (p *Proxy) handleConn(ctx context.Context, c net.Conn) error {
 		if err == nil {
 			break
 		} else {
-			log.Printf("Failed to connect backend: %v", err)
+			p.logger.Error("Failed to connect backend", zap.Error(err))
 		}
 	}
 
 	if err != nil {
-		log.Printf("Giveup to connect backends: %v", err)
+		p.logger.Error("Giveup to connect backends", zap.Error(err))
 		c.Close()
 		return err
 	}
@@ -104,7 +112,7 @@ func (p *Proxy) handleConn(ctx context.Context, c net.Conn) error {
 		_, err := io.Copy(s, c)
 		if err != nil {
 			if !goClose {
-				log.Printf("Copy from client: %v", err)
+				p.logger.Error("Copy from client", zap.Error(err))
 				return
 			}
 		}
@@ -117,7 +125,7 @@ func (p *Proxy) handleConn(ctx context.Context, c net.Conn) error {
 		_, err := io.Copy(c, s)
 		if err != nil {
 			if !goClose {
-				log.Printf("Copy from upstream: %v", err)
+				p.logger.Error("Copy from upstream", zap.Error(err))
 				return
 			}
 		}

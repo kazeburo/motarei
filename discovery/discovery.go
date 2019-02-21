@@ -3,7 +3,6 @@ package discovery
 import (
 	"context"
 	"fmt"
-	"log"
 	"sort"
 	"sync"
 	"time"
@@ -11,6 +10,7 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
 	client "github.com/docker/docker/client"
+	"go.uber.org/zap"
 )
 
 const (
@@ -30,10 +30,11 @@ type Discovery struct {
 	backends     map[uint16][]BackendContainer
 	filter       filters.Args
 	privatePorts []uint16
+	logger       *zap.Logger
 }
 
 // NewDiscovery : create new Discovery
-func NewDiscovery(ctx context.Context, label string) (*Discovery, error) {
+func NewDiscovery(ctx context.Context, label string, logger *zap.Logger) (*Discovery, error) {
 	cli, err := client.NewEnvClient()
 	if err != nil {
 		return nil, err
@@ -65,6 +66,7 @@ func NewDiscovery(ctx context.Context, label string) (*Discovery, error) {
 		mu:           new(sync.Mutex),
 		filter:       filter,
 		privatePorts: privatePorts,
+		logger:       logger,
 	}, nil
 }
 
@@ -136,7 +138,7 @@ func (d *Discovery) Run(ctx context.Context) {
 		case _ = <-ticker.C:
 			_, err := d.RunDiscovery(ctx)
 			if err != nil {
-				log.Printf("Regularly runDiscovery failed:%v", err)
+				d.logger.Error("Regularly runDiscovery failed", zap.Error(err))
 			}
 		}
 	}
