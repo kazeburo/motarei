@@ -81,11 +81,6 @@ func (p *Proxy) handleConn(ctx context.Context, c net.Conn) error {
 		return err
 	}
 
-	if len(backends) == 0 {
-		p.logger.Error("Failed to get backends port")
-		c.Close()
-		return fmt.Errorf("Failed to get backends port")
-	}
 	var s net.Conn
 	for _, backend := range backends {
 		// log.Printf("Proxy %s:%d => 127.0.0.1:%d (%s)", p.listen, p.port, backend.PublicPort, c.RemoteAddr())
