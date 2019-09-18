@@ -21,6 +21,7 @@ type cmdOpts struct {
 	BindIP              string        `long:"bind" default:"0.0.0.0" description:"IP address to bind"`
 	DockerLabel         string        `long:"label" short:"l" description:"label to filter container. eg app=nginx" required:"true"`
 	ProxyConnectTimeout time.Duration `long:"proxy-connect-timeout" default:"60s" description:"timeout of connection to upstream"`
+	ProxyConnectIP      string        `long:"proxy-connect-ip" default:"127.0.0.1" description:"destination ip address to connect to upstream"`
 	Version             bool          `short:"v" long:"version" description:"Show version"`
 }
 
@@ -69,7 +70,7 @@ Compiler: %s %s
 	for _, port := range privatePorts {
 		port := port
 		eg.Go(func() error {
-			p := proxy.NewProxy(opts.BindIP, port, opts.ProxyConnectTimeout, d, logger)
+			p := proxy.NewProxy(opts.BindIP, opts.ProxyConnectIP, port, opts.ProxyConnectTimeout, d, logger)
 			return p.Start(ctx)
 		})
 	}

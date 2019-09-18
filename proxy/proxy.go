@@ -18,6 +18,7 @@ const (
 // Proxy proxy struct
 type Proxy struct {
 	listen  string
+	ip      string
 	port    uint16
 	timeout time.Duration
 	d       *discovery.Discovery
@@ -26,9 +27,10 @@ type Proxy struct {
 }
 
 // NewProxy create new proxy
-func NewProxy(listen string, port uint16, timeout time.Duration, d *discovery.Discovery, logger *zap.Logger) *Proxy {
+func NewProxy(listen, ip string, port uint16, timeout time.Duration, d *discovery.Discovery, logger *zap.Logger) *Proxy {
 	return &Proxy{
 		listen:  listen,
+		ip:      ip,
 		port:    port,
 		timeout: timeout,
 		d:       d,
@@ -84,7 +86,7 @@ func (p *Proxy) handleConn(ctx context.Context, c net.Conn) error {
 	var s net.Conn
 	for _, backend := range backends {
 		// log.Printf("Proxy %s:%d => 127.0.0.1:%d (%s)", p.listen, p.port, backend.PublicPort, c.RemoteAddr())
-		s, err = net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", backend.PublicPort), p.timeout)
+		s, err = net.DialTimeout("tcp", fmt.Sprintf("%s:%d", p.ip, backend.PublicPort), p.timeout)
 		if err == nil {
 			break
 		} else {
